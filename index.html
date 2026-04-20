@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>4-7-8 Breathe</title>
+
+  <style>
+    /* ─── Reset & base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg:           #0d1b2a;   /* deep navy */
+      --surface:      #1b2d42;
+      --accent-inhale:#4fc3f7;   /* sky blue  */
+      --accent-hold:  #b39ddb;   /* soft violet */
+      --accent-exhale:#80cbc4;   /* teal mint  */
+      --text-primary: #e8edf2;
+      --text-muted:   #7a8fa6;
+      --btn-bg:       #243447;
+      --btn-hover:    #2e4260;
+      --btn-active:   #1a2535;
+      --radius:       12px;
+      --transition:   0.4s ease;
+
+      /* Current-phase colour — updated by JS */
+      --phase-color:  var(--accent-inhale);
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* ─── Ripple background ─────────────────────────────────────────────────── */
+    /* Four large concentric rings that slowly pulse outward */
+    .ripple-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .ripple-layer span {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(79, 195, 247, 0.06);
+      transform: translate(-50%, -50%);
+      left: 50%;
+      top: 50%;
+      animation: ripple-pulse 8s ease-in-out infinite;
+    }
+
+    .ripple-layer span:nth-child(1) { width: 30vmax; height: 30vmax; animation-delay: 0s; }
+    .ripple-layer span:nth-child(2) { width: 50vmax; height: 50vmax; animation-delay: 2s; }
+    .ripple-layer span:nth-child(3) { width: 70vmax; height: 70vmax; animation-delay: 4s; }
+    .ripple-layer span:nth-child(4) { width: 90vmax; height: 90vmax; animation-delay: 6s; }
+
+    @keyframes ripple-pulse {
+      0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(1);   }
+      50%       { opacity: 0.8; transform: translate(-50%, -50%) scale(1.04); }
+    }
+
+    /* ─── Main card ─────────────────────────────────────────────────────────── */
+    .card {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+      padding: 36px 28px 32px;
+      width: min(480px, 96vw);
+      background: rgba(27, 45, 66, 0.60);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 24px;
+    }
+
+    /* ─── Header ────────────────────────────────────────────────────────────── */
+    .app-title {
+      font-size: clamp(1.1rem, 3vw, 1.35rem);
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* ─── Duration selector ─────────────────────────────────────────────────── */
+    .duration-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .dur-btn {
+      background: var(--btn-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 6px 16px;
+      transition: background var(--transition), color var(--transition),
+                  border-color var(--transition);
+    }
+
+    .dur-btn:hover  { background: var(--btn-hover); color: var(--text-primary); }
+    .dur-btn.active {
+      background: var(--btn-hover);
+      border-color: var(--phase-color);
+      color: var(--phase-color);
+    }
+
+    /* ─── Breathing circle ──────────────────────────────────────────────────── */
+    .circle-wrapper {
+      position: relative;
+      width: clamp(180px, 45vw, 240px);
+      height: clamp(180px, 45vw, 240px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Outer glow ring */
+    .circle-glow {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--phase-color) 0%, transparent 70%);
+      opacity: 0.18;
+      transition: background 0.6s ease;
+      filter: blur(12px);
+    }
+
+    /* The breathing circle itself */
+    .circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%,
+        color-mix(in srgb, var(--phase-color) 60%, white),
+        color-mix(in srgb, var(--phase-color) 80%, transparent));
+      box-shadow: 0 0 40px color-mix(in srgb, var(--phase-color) 40%, transparent);
+      transition:
+        transform 0.6s ease,          /* JS will override with per-phase timing */
+        background 0.6s ease,
+        box-shadow 0.6s ease;
+      will-change: transform;
+    }
+
+    /* ─── Phase info ────────────────────────────────────────────────────────── */
+    .phase-label {
+      font-size: clamp(1.8rem, 6vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--phase-color);
+      transition: color 0.6s ease;
+      min-height: 1.2em;
+      text-align: center;
+    }
+
+    .countdown {
+      font-size: clamp(2.4rem, 8vw, 3.4rem);
+      font-weight: 300;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+      min-height: 1.2em;
+      line-height: 1;
+    }
+
+    /* ─── Cycle info ────────────────────────────────────────────────────────── */
+    .cycle-info {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      min-height: 1.2em;
+    }
+
+    /* ─── Controls ──────────────────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      gap: 14px;
+    }
+
+    .ctrl-btn {
+      background: var(--btn-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      padding: 10px 26px;
+      transition: background var(--transition), transform 0.15s ease;
+      user-select: none;
+    }
+
+    .ctrl-btn:hover  { background: var(--btn-hover); }
+    .ctrl-btn:active { background: var(--btn-active); transform: scale(0.97); }
+
+    #btn-start { border-color: var(--phase-color); color: var(--phase-color); }
+
+    /* ─── End screen ────────────────────────────────────────────────────────── */
+    .end-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      text-align: center;
+    }
+
+    .end-screen.visible { display: flex; }
+
+    .end-title {
+      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      font-weight: 700;
+      color: var(--accent-inhale);
+    }
+
+    .end-message {
+      font-size: 1rem;
+      color: var(--text-muted);
+      max-width: 320px;
+      line-height: 1.6;
+    }
+
+    .end-stats {
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    /* ─── Responsive tweaks ─────────────────────────────────────────────────── */
+    @media (max-height: 620px) {
+      .card { gap: 16px; padding: 20px 18px; }
+      .app-title { font-size: 0.95rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Subtle animated ripple background -->
+  <div class="ripple-layer" aria-hidden="true">
+    <span></span><span></span><span></span><span></span>
+  </div>
+
+  <!-- ── Main card ─────────────────────────────────────────────────────────── -->
+  <main class="card" role="main">
+
+    <h1 class="app-title">4 · 7 · 8 Breathe</h1>
+
+    <!-- Session duration selector -->
+    <div class="duration-row" role="group" aria-label="Session duration">
+      <button class="dur-btn active" data-minutes="3"  aria-pressed="true">3 min</button>
+      <button class="dur-btn"        data-minutes="5"  aria-pressed="false">5 min</button>
+      <button class="dur-btn"        data-minutes="10" aria-pressed="false">10 min</button>
+    </div>
+
+    <!-- Breathing circle -->
+    <div class="circle-wrapper" aria-hidden="true">
+      <div class="circle-glow"></div>
+      <div class="circle" id="breathe-circle"></div>
+    </div>
+
+    <!-- Phase label + countdown -->
+    <p  class="phase-label"  id="phase-label"  aria-live="polite">Ready</p>
+    <p  class="countdown"    id="countdown"    aria-live="off">—</p>
+
+    <!-- Cycle info -->
+    <p class="cycle-info" id="cycle-info" aria-live="polite"></p>
+
+    <!-- Start / Pause / Reset -->
+    <div class="controls">
+      <button class="ctrl-btn" id="btn-start">Start</button>
+      <button class="ctrl-btn" id="btn-reset">Reset</button>
+    </div>
+
+    <!-- End screen (shown when session completes) -->
+    <div class="end-screen" id="end-screen" aria-live="assertive" role="status">
+      <p class="end-title">🌿 Well Done</p>
+      <p class="end-message" id="end-message"></p>
+      <p class="end-stats"   id="end-stats"></p>
+      <button class="ctrl-btn" id="btn-again">Start Again</button>
+    </div>
+
+  </main>
+
+  <script>
+    /* ═══════════════════════════════════════════════════════════════════════
+       4-7-8 BREATHING APP  —  all logic lives here
+       Phases:  Inhale 4 s → Hold 7 s → Exhale 8 s   (total 19 s / cycle)
+    ══════════════════════════════════════════════════════════════════════ */
+
+    /* ── Phase definitions ─────────────────────────────────────────────── */
+    const PHASES = [
+      { name: 'Inhale', duration: 4,  scale: 1.55, colorVar: '--accent-inhale',  freq: 528, vibration: [30] },
+      { name: 'Hold',   duration: 7,  scale: 1.55, colorVar: '--accent-hold',    freq: 396, vibration: [15] },
+      { name: 'Exhale', duration: 8,  scale: 0.75, colorVar: '--accent-exhale',  freq: 432, vibration: [20, 50, 20] },
+    ];
+    const CYCLE_DURATION = PHASES.reduce((s, p) => s + p.duration, 0); // 19 s
+
+    /* Closing chord played at session end (solfeggio-inspired frequencies) */
+    const COMPLETION_CHORD = [
+      { freq: 528, dur: 0.8, delay:   0 },
+      { freq: 432, dur: 0.8, delay: 400 },
+      { freq: 396, dur: 1.2, delay: 800 },
+    ];
+
+    /* ── DOM references ────────────────────────────────────────────────── */
+    const circle        = document.getElementById('breathe-circle');
+    const circleWrapper = circle.closest('.circle-wrapper');
+    const controls      = document.querySelector('.controls');
+    const phaseLabel    = document.getElementById('phase-label');
+    const countdownEl   = document.getElementById('countdown');
+    const cycleInfo     = document.getElementById('cycle-info');
+    const btnStart      = document.getElementById('btn-start');
+    const btnReset      = document.getElementById('btn-reset');
+    const btnAgain      = document.getElementById('btn-again');
+    const endScreen     = document.getElementById('end-screen');
+    const endMessage    = document.getElementById('end-message');
+    const endStats      = document.getElementById('end-stats');
+    const durBtns       = document.querySelectorAll('.dur-btn');
+    const root          = document.documentElement;
+
+    /* ── State ─────────────────────────────────────────────────────────── */
+    let sessionMinutes = 3;                        // selected duration
+    let totalCycles    = 0;                        // computed from duration
+    let currentCycle   = 0;                        // 0-indexed completed cycles
+    let phaseIndex     = 0;                        // 0 = Inhale, 1 = Hold, 2 = Exhale
+    let secondsLeft    = PHASES[0].duration;
+    let isFirstStart   = true;                     // true until the first enterPhase call
+    let running        = false;
+    let tickTimer      = null;                     // setInterval handle
+
+    /* ── Web Audio context (created lazily on first user gesture) ──────── */
+    let audioCtx = null;
+
+    function getAudioCtx() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      // Resume in case browser suspended it
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    /**
+     * Play a soft sine-wave tone at the given frequency.
+     * @param {number} freq        - Hz
+     * @param {number} [dur=0.6]   - seconds; 0.6 s is the default phase-transition cue length
+     */
+    function playTone(freq, dur = 0.6) {
+      try {
+        const ctx  = getAudioCtx();
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type      = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        // Gentle fade-in / fade-out envelope
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + dur - 0.08);
+        gain.gain.linearRampToValueAtTime(0,    ctx.currentTime + dur);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + dur);
+      } catch (e) {
+        // Audio not available — fail silently
+      }
+    }
+
+    /* ── Haptic helper ─────────────────────────────────────────────────── */
+    function vibrate(pattern) {
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    }
+
+    /* ── Colour & visual helpers ───────────────────────────────────────── */
+    function applyPhaseColor(phase) {
+      const color = getComputedStyle(root).getPropertyValue(phase.colorVar).trim();
+      root.style.setProperty('--phase-color', color);
+    }
+
+    /**
+     * Animate the circle to a new scale using a CSS transition whose duration
+     * matches the current phase exactly (for smooth linear growth / shrink).
+     */
+    function animateCircle(phase) {
+      // Instant reset of transition, then re-apply with correct timing
+      circle.style.transition = 'none';
+      // Force reflow so the browser registers the transition removal
+      void circle.offsetHeight;
+
+      const easing = phase.name === 'Hold' ? 'ease' : 'ease-in-out';
+      circle.style.transition =
+        `transform ${phase.duration}s ${easing}, ` +
+        `background 0.6s ease, box-shadow 0.6s ease`;
+      circle.style.transform = `scale(${phase.scale})`;
+    }
+
+    /* ── Phase transition ──────────────────────────────────────────────── */
+    function enterPhase(index) {
+      phaseIndex  = index;
+      const phase = PHASES[index];
+      secondsLeft = phase.duration;
+
+      // Update label
+      phaseLabel.textContent = phase.name;
+
+      // Update colour
+      applyPhaseColor(phase);
+
+      // Animate circle
+      animateCircle(phase);
+
+      // Sound cue + haptic
+      playTone(phase.freq, 0.7);
+      vibrate(phase.vibration);
+
+      // Refresh display immediately
+      updateDisplay();
+    }
+
+    /* ── Tick (called every second) ────────────────────────────────────── */
+    function tick() {
+      secondsLeft--;
+
+      if (secondsLeft <= 0) {
+        // Move to next phase
+        const nextPhase = (phaseIndex + 1) % PHASES.length;
+
+        // If we just finished exhale, a full cycle is complete
+        if (phaseIndex === 2) {
+          currentCycle++;
+
+          // Check if session is done
+          if (currentCycle === totalCycles) {
+            finishSession();
+            return;
+          }
+        }
+
+        enterPhase(nextPhase);
+      } else {
+        updateDisplay();
+      }
+    }
+
+    /* ── Update DOM display ────────────────────────────────────────────── */
+    function updateDisplay() {
+      countdownEl.textContent = secondsLeft;
+      if (totalCycles > 0) {
+        cycleInfo.textContent =
+          `Cycle ${currentCycle + 1} of ${totalCycles}`;
+      }
+    }
+
+    /* ── Start / resume ────────────────────────────────────────────────── */
+    function startSession() {
+      if (running) return;
+      running = true;
+      btnStart.textContent = 'Pause';
+
+      // Trigger the first phase animation only on the very first start
+      if (isFirstStart) {
+        isFirstStart = false;
+        enterPhase(0);
+      }
+      // Resume — just restart the tick; circle stays at its last animated scale
+      tickTimer = setInterval(tick, 1000);
+    }
+
+    /* ── Pause ─────────────────────────────────────────────────────────── */
+    function pauseSession() {
+      if (!running) return;
+      running = false;
+      btnStart.textContent = 'Resume';
+      clearInterval(tickTimer);
+
+      // Freeze circle at current visual scale
+      const computedTransform = getComputedStyle(circle).transform;
+      circle.style.transition = 'none';
+      circle.style.transform  = computedTransform;
+    }
+
+    /* ── Reset ─────────────────────────────────────────────────────────── */
+    function resetSession() {
+      clearInterval(tickTimer);
+      running      = false;
+      isFirstStart = true;
+
+      currentCycle = 0;
+      phaseIndex   = 0;
+      secondsLeft  = PHASES[0].duration;
+
+      btnStart.textContent    = 'Start';
+      phaseLabel.textContent  = 'Ready';
+      countdownEl.textContent = '—';
+      cycleInfo.textContent   = '';
+
+      // Reset circle instantly
+      circle.style.transition = 'none';
+      circle.style.transform  = 'scale(1)';
+
+      // Restore default colour
+      root.style.setProperty('--phase-color',
+        getComputedStyle(root).getPropertyValue('--accent-inhale').trim());
+
+      hideEndScreen();
+    }
+
+    /* ── Session end ───────────────────────────────────────────────────── */
+    function finishSession() {
+      clearInterval(tickTimer);
+      running = false;
+
+      // Reset circle
+      circle.style.transition = 'none';
+      circle.style.transform  = 'scale(1)';
+
+      // Play a gentle closing chord sequence
+      COMPLETION_CHORD.forEach(({ freq, dur, delay }) =>
+        setTimeout(() => playTone(freq, dur), delay));
+
+      // Celebratory haptic
+      vibrate([50, 100, 50, 100, 100]);
+
+      endMessage.textContent =
+        `You completed ${totalCycles} breathing cycle${totalCycles !== 1 ? 's' : ''} ` +
+        `in ${sessionMinutes} minute${sessionMinutes !== 1 ? 's' : ''}. ` +
+        `Take a moment to notice how you feel.`;
+      const totalSecs = totalCycles * CYCLE_DURATION;
+      endStats.textContent =
+        `${totalCycles} cycles · ${formatTime(totalSecs)} of mindful breathing`;
+
+      showEndScreen();
+    }
+
+    /* ── End screen helpers ────────────────────────────────────────────── */
+    function showEndScreen() {
+      endScreen.classList.add('visible');
+      // Hide the main UI elements during the end screen
+      circleWrapper.style.display = 'none';
+      phaseLabel.style.display    = 'none';
+      countdownEl.style.display   = 'none';
+      cycleInfo.style.display     = 'none';
+      controls.style.display      = 'none';
+    }
+
+    function hideEndScreen() {
+      endScreen.classList.remove('visible');
+      circleWrapper.style.display = '';
+      phaseLabel.style.display    = '';
+      countdownEl.style.display   = '';
+      cycleInfo.style.display     = '';
+      controls.style.display      = '';
+    }
+
+    /* ── Utility ───────────────────────────────────────────────────────── */
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return m > 0
+        ? `${m} min${m !== 1 ? 's' : ''} ${s > 0 ? s + ' s' : ''}`.trim()
+        : `${s} s`;
+    }
+
+    /* ── Duration buttons ──────────────────────────────────────────────── */
+    function computeTotalCycles(minutes) {
+      return Math.max(1, Math.floor((minutes * 60) / CYCLE_DURATION));
+    }
+
+    durBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (running) return; // don't allow mid-session changes
+
+        durBtns.forEach(b => {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+
+        sessionMinutes = parseInt(btn.dataset.minutes, 10);
+        totalCycles    = computeTotalCycles(sessionMinutes);
+
+        resetSession();
+      });
+    });
+
+    /* ── Button event listeners ────────────────────────────────────────── */
+    btnStart.addEventListener('click', () => {
+      if (running) {
+        pauseSession();
+      } else {
+        startSession();
+      }
+    });
+
+    btnReset.addEventListener('click', () => {
+      resetSession();
+    });
+
+    btnAgain.addEventListener('click', () => {
+      resetSession();
+    });
+
+    /* ── Keyboard accessibility ────────────────────────────────────────── */
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        btnStart.click();
+      } else if (e.code === 'KeyR') {
+        resetSession();
+      }
+    });
+
+    /* ── Initialise ────────────────────────────────────────────────────── */
+    (function init() {
+      sessionMinutes = 3;
+      totalCycles    = computeTotalCycles(sessionMinutes);
+      resetSession();
+    })();
+
+  </script>
+</body>
+</html>
